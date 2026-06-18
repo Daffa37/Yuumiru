@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Profil - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title" data-i18n="profile_title">Profil Saya</h1>
+    </div>
+
+    <div class="profile-layout">
+      <div class="profile-card">
+        <div class="profile-avatar-row">
+          <div class="profile-avatar"><img id="profileAvatarImg" src="" alt=""></div>
+          <div>
+            <div class="profile-username" id="profileUsername"></div>
+            <div class="profile-email" id="profileEmail"></div>
+            <div class="profile-email" id="profileJoined" style="margin-top:2px;"></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" data-i18n="profile_language">Bahasa</label>
+          <div class="lang-options" id="langOptions">
+            <div class="lang-option" data-lang="id">
+              <span class="lang-option-flag">🇮🇩</span>
+              <span class="lang-option-name">Indonesia</span>
+            </div>
+            <div class="lang-option" data-lang="en">
+              <span class="lang-option-flag">🇬🇧</span>
+              <span class="lang-option-name">English</span>
+            </div>
+            <div class="lang-option" data-lang="ja">
+              <span class="lang-option-flag">🇯🇵</span>
+              <span class="lang-option-name">日本語</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+function renderLangOptions() {
+  document.querySelectorAll('.lang-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.lang === Yi18n.current);
+  });
+}
+
+function renderProfile() {
+  if (!YAuth.isLoggedIn() || !YAuth.profile) {
+    window.location.href = 'login.html';
+    return;
+  }
+  const p = YAuth.profile;
+  document.getElementById('profileAvatarImg').src = p.avatar_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + p.username;
+  document.getElementById('profileUsername').textContent = p.username;
+  document.getElementById('profileEmail').textContent = p.email;
+  const joinedLabel = Yi18n.t('profile_member_since');
+  const joinedDate = new Date(p.created_at).toLocaleDateString(Yi18n.current === 'ja' ? 'ja-JP' : Yi18n.current === 'en' ? 'en-US' : 'id-ID');
+  document.getElementById('profileJoined').textContent = `${joinedLabel}: ${joinedDate}`;
+  renderLangOptions();
+}
+
+document.getElementById('langOptions').addEventListener('click', async (e) => {
+  const option = e.target.closest('.lang-option');
+  if (!option) return;
+  const lang = option.dataset.lang;
+  Yi18n.setLanguage(lang);
+  renderLangOptions();
+  await YAuth.updateLanguage(lang);
+  showToast(Yi18n.t('profile_saved'), 'success');
+});
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  renderProfile();
+  hideLoadingScreen();
+})();
+
+window.addEventListener('yuumiru:langchange', () => {
+  renderProfile();
+});
+</script>
+</body>
+</html>

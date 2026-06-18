@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Genre - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title" data-i18n="genres_title">Jelajahi Genre</h1>
+    </div>
+    <div class="genre-pills" id="genrePills"></div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+function renderGenrePills() {
+  const container = document.getElementById('genrePills');
+  container.innerHTML = GENRES_STATIC.map(g => `
+    <a href="genre.html?slug=${slugify(g)}" class="genre-pill" data-i18n-genre="${g}">${g}</a>
+  `).join('');
+  Yi18n.applyToDOM(container);
+}
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  renderGenrePills();
+  hideLoadingScreen();
+})();
+
+window.addEventListener('yuumiru:langchange', () => renderGenrePills());
+</script>
+</body>
+</html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container" style="padding-top:20px;">
+    <div id="watchContainer"></div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+const episodeId = new URLSearchParams(window.location.search).get('ep');
+let currentEpisode = null;
+let currentAnime = null;
+let nextEpisode = null;
+let countdownInterval = null;
+let reactionChannel = null;
+let commentChannel = null;
+
+function timeAgo(dateStr) {
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  const lang = Yi18n.current;
+  const units = [
+    [60, lang==='id'?'detik':lang==='ja'?'秒前':'sec ago'],
+    [3600, lang==='id'?'menit':lang==='ja'?'分前':'min ago'],
+    [86400, lang==='id'?'jam':lang==='ja'?'時間前':'hr ago'],
+    [2592000, lang==='id'?'hari':lang==='ja'?'日前':'days ago'],
+  ];
+  if (diff < 60) return lang==='id' ? 'Baru saja' : lang==='ja' ? 'たった今' : 'Just now';
+  if (diff < 3600) return `${Math.floor(diff/60)} ${units[0][1]}${lang==='id'?' lalu':''}`;
+  if (diff < 86400) return `${Math.floor(diff/3600)} ${units[1][1]}${lang==='id'?' lalu':''}`;
+  return `${Math.floor(diff/86400)} ${units[2][1]}${lang==='id'?' lalu':''}`;
+}
+
+function playerHTML(ep) {
+  if (ep.video_type === 'direct') {
+    return `<video controls autoplay src="${escapeHtml(ep.video_url)}" id="videoPlayer"></video>`;
+  }
+  // iframe/embed (YouTube etc.)
+  let src = ep.video_url;
+  return `<iframe src="${escapeHtml(src)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen id="videoPlayer"></iframe>`;
+}
+
+function upNextItemHTML(ep, isCurrent) {
+  return `
+    <a href="watch.html?ep=${ep.id}" class="up-next-item ${isCurrent ? 'current' : ''}">
+      <img class="up-next-thumb" src="${escapeHtml(ep.thumbnail_url || '')}" alt="" loading="lazy" onerror="this.style.opacity=0">
+      <div class="up-next-info">
+        <div class="up-next-ep">EP ${String(ep.episode_number).padStart(2,'0')}</div>
+        <div class="up-next-name">${escapeHtml(ep.title || ('Episode ' + ep.episode_number))}</div>
+      </div>
+    </a>
+  `;
+}
+
+function commentItemHTML(c) {
+  const canDelete = YAuth.isLoggedIn() && (YAuth.user.id === c.user_id || YAuth.isAdmin());
+  const username = c.profiles?.username || 'User';
+  const avatar = c.profiles?.avatar_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + username;
+  return `
+    <div class="comment-item" data-comment-id="${c.id}">
+      <div class="comment-avatar"><img src="${escapeHtml(avatar)}" alt=""></div>
+      <div class="comment-body">
+        <div class="comment-header">
+          <span class="comment-username">${escapeHtml(username)}</span>
+          <span class="comment-time">${timeAgo(c.created_at)}</span>
+        </div>
+        <div class="comment-text">${escapeHtml(c.content)}</div>
+        ${canDelete ? `<button class="comment-delete" data-delete-id="${c.id}" data-i18n="watch_delete">Hapus</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+async function refreshReactionUI() {
+  const counts = await YData.getReactionCounts(currentEpisode.id);
+  let userReaction = null;
+  if (YAuth.isLoggedIn()) {
+    userReaction = await YData.getUserReaction(currentEpisode.id, YAuth.user.id);
+  }
+  const likeBtn = document.getElementById('likeBtn');
+  const dislikeBtn = document.getElementById('dislikeBtn');
+  if (!likeBtn) return;
+  document.getElementById('likeCount').textContent = counts.likes;
+  document.getElementById('dislikeCount').textContent = counts.dislikes;
+  likeBtn.classList.toggle('active', userReaction?.type === 'like');
+  dislikeBtn.classList.toggle('active', userReaction?.type === 'dislike');
+}
+
+async function handleReaction(type) {
+  if (!YAuth.isLoggedIn()) { window.location.href = 'login.html'; return; }
+  try {
+    await YData.setReaction(currentEpisode.id, YAuth.user.id, type);
+    // UI updates via realtime subscription automatically
+  } catch (err) {
+    console.error(err);
+    showToast(Yi18n.t('error_generic'), 'error');
+  }
+}
+
+async function loadComments() {
+  const list = await YData.getComments(currentEpisode.id);
+  const container = document.getElementById('commentsList');
+  if (!list.length) {
+    container.innerHTML = `<p style="color:var(--text-faint);font-size:14px;" data-i18n="watch_no_comments">Belum ada komentar. Jadilah yang pertama!</p>`;
+  } else {
+    container.innerHTML = list.map(commentItemHTML).join('');
+  }
+  Yi18n.applyToDOM(container);
+  container.querySelectorAll('[data-delete-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(Yi18n.t('admin_confirm_delete'))) return;
+      try {
+        await YData.deleteComment(btn.dataset.deleteId);
+      } catch (err) { showToast(Yi18n.t('error_generic'), 'error'); }
+    });
+  });
+}
+
+function startNextEpisodeCountdown() {
+  if (!nextEpisode || !currentEpisode.next_episode_at) return;
+  const target = new Date(currentEpisode.next_episode_at).getTime();
+  const overlay = document.getElementById('nextEpOverlay');
+  if (!overlay) return;
+
+  function tick() {
+    const diff = target - Date.now();
+    if (diff <= 0) {
+      clearInterval(countdownInterval);
+      document.getElementById('nextEpTimerValue').textContent = '00:00:00';
+      return;
+    }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    document.getElementById('nextEpTimerValue').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  tick();
+  countdownInterval = setInterval(tick, 1000);
+}
+
+async function loadWatch() {
+  const container = document.getElementById('watchContainer');
+  if (!episodeId) { window.location.href = 'index.html'; return; }
+
+  try {
+    currentEpisode = await YData.getEpisode(episodeId);
+    currentAnime = currentEpisode.anime;
+    document.title = `${currentAnime.title} - EP${currentEpisode.episode_number} - Yuumiru`;
+
+    const allEpisodes = await YData.getEpisodesByAnime(currentAnime.id);
+    const idx = allEpisodes.findIndex(e => e.id === currentEpisode.id);
+    nextEpisode = idx >= 0 && idx < allEpisodes.length - 1 ? allEpisodes[idx + 1] : null;
+
+    const genres = (currentAnime.anime_genres || []);
+    let genreHTML = '';
+    if (genres.length) {
+      genreHTML = genres.map(ag => ag.genres ? `<a href="genre.html?slug=${ag.genres.slug}" class="hero-genre-tag" data-i18n-genre="${ag.genres.name}">${ag.genres.name}</a>` : '').join('');
+    } else {
+      // anime object inside episode query may not include anime_genres; fetch full anime if needed
+      const fullAnime = await YData.getAnimeById(currentAnime.id);
+      genreHTML = (fullAnime.anime_genres || []).map(ag => ag.genres ? `<a href="genre.html?slug=${ag.genres.slug}" class="hero-genre-tag" data-i18n-genre="${ag.genres.name}">${ag.genres.name}</a>` : '').join('');
+    }
+
+    const showCountdown = nextEpisode && currentEpisode.next_episode_at && new Date(currentEpisode.next_episode_at) > new Date();
+
+    container.innerHTML = `
+      <div class="watch-layout">
+        <div>
+          <div class="player-wrap">
+            ${playerHTML(currentEpisode)}
+            <div class="next-ep-overlay ${showCountdown ? 'show' : ''}" id="nextEpOverlay">
+              <div class="next-ep-label" data-i18n="watch_next_in">Episode selanjutnya dalam</div>
+              <div class="next-ep-timer" id="nextEpTimerValue">00:00:00</div>
+            </div>
+          </div>
+
+          <div class="watch-title-row">
+            <div>
+              <h1 class="watch-title">${escapeHtml(currentAnime.title)} - EP ${currentEpisode.episode_number}</h1>
+              <a href="anime.html?id=${currentAnime.id}" class="watch-anime-link">${escapeHtml(currentAnime.title)}</a>
+            </div>
+            <div class="watch-actions">
+              <button class="reaction-btn like" id="likeBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11v10H4a1 1 0 01-1-1v-8a1 1 0 011-1h3zm0 0l4-8a2 2 0 012 2v5h5.5a1.5 1.5 0 011.45 1.87l-1.5 6A1.5 1.5 0 0117 19H7"/></svg>
+                <span id="likeCount">0</span>
+              </button>
+              <button class="reaction-btn dislike" id="dislikeBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transform:scaleY(-1) scaleX(-1);"><path d="M7 11v10H4a1 1 0 01-1-1v-8a1 1 0 011-1h3zm0 0l4-8a2 2 0 012 2v5h5.5a1.5 1.5 0 011.45 1.87l-1.5 6A1.5 1.5 0 0117 19H7"/></svg>
+                <span id="dislikeCount">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="watch-genres-row">${genreHTML}</div>
+
+          <div class="comments-section">
+            <h2 class="comments-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+              <span data-i18n="watch_comments">Komentar</span>
+            </h2>
+            <div id="commentFormArea"></div>
+            <div id="commentsList"></div>
+          </div>
+        </div>
+
+        <div class="up-next-panel">
+          <div class="up-next-title" data-i18n="watch_next_episode">Episode Berikutnya</div>
+          <div id="upNextList">
+            ${allEpisodes.map(ep => upNextItemHTML(ep, ep.id === currentEpisode.id)).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    Yi18n.applyToDOM(container);
+
+    renderCommentForm();
+    await loadComments();
+    await refreshReactionUI();
+    startNextEpisodeCountdown();
+
+    document.getElementById('likeBtn').addEventListener('click', () => handleReaction('like'));
+    document.getElementById('dislikeBtn').addEventListener('click', () => handleReaction('dislike'));
+
+    // Realtime subscriptions
+    if (reactionChannel) sb.removeChannel(reactionChannel);
+    if (commentChannel) sb.removeChannel(commentChannel);
+    reactionChannel = YData.subscribeToReactions(currentEpisode.id, () => refreshReactionUI());
+    commentChannel = YData.subscribeToComments(currentEpisode.id, () => loadComments());
+
+    // Save to history if logged in
+    if (YAuth.isLoggedIn()) {
+      YData.addToHistory(YAuth.user.id, currentEpisode.id, currentAnime.id).catch(() => {});
+    }
+
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = `<div class="empty-state"><h3 data-i18n="error_generic"></h3></div>`;
+    Yi18n.applyToDOM(container);
+  } finally {
+    hideLoadingScreen();
+  }
+}
+
+function renderCommentForm() {
+  const area = document.getElementById('commentFormArea');
+  if (YAuth.isLoggedIn() && YAuth.profile) {
+    const avatar = YAuth.profile.avatar_url || 'https://api.dicebear.com/7.x/shapes/svg?seed=' + YAuth.profile.username;
+    area.innerHTML = `
+      <div class="comment-form">
+        <div class="comment-form-avatar"><img src="${escapeHtml(avatar)}" alt=""></div>
+        <div class="comment-input-wrap">
+          <textarea id="commentInput" rows="1" data-i18n-placeholder="watch_comment_placeholder" placeholder="Tulis komentar..."></textarea>
+          <button class="btn btn-primary" id="sendCommentBtn" data-i18n="watch_comment_send">Kirim</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('sendCommentBtn').addEventListener('click', submitComment);
+    document.getElementById('commentInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); }
+    });
+  } else {
+    area.innerHTML = `
+      <div class="comment-login-prompt">
+        <a href="login.html" data-i18n="watch_login_to_comment">Masuk untuk berkomentar</a>
+      </div>
+    `;
+  }
+  Yi18n.applyToDOM(area);
+}
+
+async function submitComment() {
+  const input = document.getElementById('commentInput');
+  const content = input.value.trim();
+  if (!content) return;
+  const btn = document.getElementById('sendCommentBtn');
+  btn.disabled = true;
+  try {
+    await YData.addComment(currentEpisode.id, YAuth.user.id, content);
+    input.value = '';
+  } catch (err) {
+    showToast(Yi18n.t('error_generic'), 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  await loadWatch();
+})();
+
+window.addEventListener('yuumiru:langchange', () => loadWatch());
+window.addEventListener('yuumiru:authchange', () => { renderCommentForm(); loadComments(); refreshReactionUI(); });
+</script>
+</body>
+</html>

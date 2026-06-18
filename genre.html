@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Genre - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title" id="genreTitle">Genre</h1>
+      <p class="page-subtitle" id="genreCount"></p>
+    </div>
+    <div id="genreResults"></div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+const genreSlug = new URLSearchParams(window.location.search).get('slug');
+
+function animeCardHTML(anime) {
+  const epCount = (anime.episodes || []).length;
+  const statusKey = anime.status === 'completed' ? 'status_completed' : 'status_ongoing';
+  const statusClass = anime.status === 'completed' ? 'status-completed' : 'status-ongoing';
+  return `
+    <a href="anime.html?id=${anime.id}" class="anime-card">
+      <img class="anime-card-img" src="${escapeHtml(anime.cover_url || '')}" alt="${escapeHtml(anime.title)}" loading="lazy" onerror="this.style.opacity=0">
+      <div class="anime-card-body">
+        <div class="anime-card-title">${escapeHtml(anime.title)}</div>
+        <div class="anime-card-meta">
+          <span class="anime-card-status ${statusClass}" data-i18n="${statusKey}"></span>
+          <span>${epCount} EP</span>
+        </div>
+      </div>
+    </a>
+  `;
+}
+
+async function loadGenre() {
+  if (!genreSlug) { window.location.href = 'genres.html'; return; }
+  const englishName = GENRES_STATIC.find(g => slugify(g) === genreSlug) || genreSlug;
+  document.getElementById('genreTitle').textContent = Yi18n.genreName(englishName);
+  document.getElementById('genreTitle').setAttribute('data-i18n-genre', englishName);
+
+  try {
+    const animeList = await YData.getAnimeByGenreSlug(genreSlug);
+    const resultsEl = document.getElementById('genreResults');
+    const countEl = document.getElementById('genreCount');
+    countEl.textContent = `${animeList.length} ${Yi18n.t('home_all_anime')}`;
+
+    if (!animeList.length) {
+      resultsEl.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M3 17l5-5 4 4 5-6 4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3 data-i18n="home_empty_title">Belum ada konten</h3>
+          <p data-i18n="home_empty_desc"></p>
+        </div>
+      `;
+    } else {
+      resultsEl.innerHTML = `<div class="anime-grid">${animeList.map(animeCardHTML).join('')}</div>`;
+    }
+    Yi18n.applyToDOM(resultsEl);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideLoadingScreen();
+  }
+}
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  await loadGenre();
+})();
+
+window.addEventListener('yuumiru:langchange', () => loadGenre());
+</script>
+</body>
+</html>

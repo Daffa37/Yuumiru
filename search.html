@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Pencarian - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title"><span data-i18n="search_title">Hasil pencarian untuk</span> "<span id="queryText"></span>"</h1>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+const query = new URLSearchParams(window.location.search).get('q') || '';
+
+function animeCardHTML(anime) {
+  const epCount = (anime.episodes || []).length;
+  const statusKey = anime.status === 'completed' ? 'status_completed' : 'status_ongoing';
+  const statusClass = anime.status === 'completed' ? 'status-completed' : 'status-ongoing';
+  return `
+    <a href="anime.html?id=${anime.id}" class="anime-card">
+      <img class="anime-card-img" src="${escapeHtml(anime.cover_url || '')}" alt="${escapeHtml(anime.title)}" loading="lazy" onerror="this.style.opacity=0">
+      <div class="anime-card-body">
+        <div class="anime-card-title">${escapeHtml(anime.title)}</div>
+        <div class="anime-card-meta">
+          <span class="anime-card-status ${statusClass}" data-i18n="${statusKey}"></span>
+          <span>${epCount} EP</span>
+        </div>
+      </div>
+    </a>
+  `;
+}
+
+async function loadSearch() {
+  document.getElementById('queryText').textContent = query;
+  const resultsEl = document.getElementById('searchResults');
+  if (!query) {
+    resultsEl.innerHTML = '';
+    hideLoadingScreen();
+    return;
+  }
+  try {
+    const results = await YData.searchAnime(query);
+    if (!results.length) {
+      resultsEl.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+          <h3><span data-i18n="search_no_results">Tidak ditemukan hasil untuk</span> "${escapeHtml(query)}"</h3>
+        </div>
+      `;
+    } else {
+      resultsEl.innerHTML = `<div class="anime-grid">${results.map(animeCardHTML).join('')}</div>`;
+    }
+    Yi18n.applyToDOM(resultsEl);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideLoadingScreen();
+  }
+}
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  await loadSearch();
+  // Pre-fill nav search input with current query
+  const input = document.getElementById('navSearchInput');
+  if (input) input.value = query;
+})();
+
+window.addEventListener('yuumiru:langchange', () => loadSearch());
+</script>
+</body>
+</html>

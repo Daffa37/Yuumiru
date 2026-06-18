@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div id="detailContainer"></div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+const animeId = new URLSearchParams(window.location.search).get('id');
+
+function episodeRowHTML(ep, animeTitle) {
+  return `
+    <a href="watch.html?ep=${ep.id}" class="episode-row">
+      <img class="episode-thumb" src="${escapeHtml(ep.thumbnail_url || '')}" alt="" loading="lazy" onerror="this.style.opacity=0">
+      <div>
+        <div class="episode-row-num">EP ${String(ep.episode_number).padStart(2,'0')}</div>
+        <div class="episode-row-title">${escapeHtml(ep.title || (animeTitle + ' - ' + Yi18n.t('watch_episode') + ' ' + ep.episode_number))}</div>
+      </div>
+    </a>
+  `;
+}
+
+async function loadDetail() {
+  const container = document.getElementById('detailContainer');
+  if (!animeId) { window.location.href = 'index.html'; return; }
+  try {
+    const anime = await YData.getAnimeById(animeId);
+    document.title = `${anime.title} - Yuumiru`;
+    const genres = (anime.anime_genres || []).map(ag => ag.genres).filter(Boolean);
+    const statusKey = anime.status === 'completed' ? 'status_completed' : 'status_ongoing';
+    const episodes = anime.episodes || [];
+
+    container.innerHTML = `
+      <div class="detail-banner">
+        <div class="detail-banner-bg" style="background-image:url('${escapeHtml(anime.banner_url || anime.cover_url || '')}')"></div>
+      </div>
+      <div class="container">
+        <div class="detail-body">
+          <img class="detail-poster" src="${escapeHtml(anime.cover_url || '')}" alt="${escapeHtml(anime.title)}" onerror="this.style.opacity=0">
+          <div>
+            <h1 class="detail-info-title">${escapeHtml(anime.title)}</h1>
+            <div class="detail-meta-row">
+              <span class="anime-card-status ${anime.status === 'completed' ? 'status-completed' : 'status-ongoing'}" data-i18n="${statusKey}"></span>
+              ${anime.release_year ? `<span class="detail-meta-item">${anime.release_year}</span>` : ''}
+              <span class="detail-meta-item">${episodes.length} ${Yi18n.t('detail_episodes')}</span>
+            </div>
+            <div class="detail-genres-row">
+              ${genres.map(g => `<a href="genre.html?slug=${g.slug}" class="hero-genre-tag" data-i18n-genre="${g.name}">${g.name}</a>`).join('')}
+            </div>
+            <p class="detail-synopsis">${escapeHtml(anime.description || '')}</p>
+            ${episodes.length ? `<a href="watch.html?ep=${episodes[0].id}" class="btn btn-primary" style="margin-top:8px;">
+              <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M8 5v14l11-7z"/></svg>
+              <span data-i18n="home_hero_watch">Tonton Sekarang</span>
+            </a>` : ''}
+          </div>
+        </div>
+
+        <div class="episode-list">
+          <h2 class="rail-title" data-i18n="detail_episodes" style="margin-bottom:16px;">Daftar Episode</h2>
+          ${episodes.length ? episodes.map(ep => episodeRowHTML(ep, anime.title)).join('') : `
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>
+              <h3 data-i18n="home_empty_title">Belum ada konten</h3>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+    Yi18n.applyToDOM(container);
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = `<div class="container"><div class="empty-state"><h3 data-i18n="error_generic"></h3></div></div>`;
+    Yi18n.applyToDOM(container);
+  } finally {
+    hideLoadingScreen();
+  }
+}
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  await loadDetail();
+})();
+
+window.addEventListener('yuumiru:langchange', () => loadDetail());
+</script>
+</body>
+</html>

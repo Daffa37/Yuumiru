@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Kontak - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="static-page">
+    <h1 data-i18n="contact_title">Hubungi Kami</h1>
+    <p data-i18n="contact_desc">Ada pertanyaan, saran, atau kerja sama? Hubungi kami melalui salah satu kanal di bawah ini.</p>
+
+    <div class="contact-grid">
+      <a href="mailto:yuumiru55@gmail.com" class="contact-card">
+        <div class="contact-icon email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+        </div>
+        <div>
+          <div class="contact-card-title">Email</div>
+          <div class="contact-card-value">yuumiru55@gmail.com</div>
+        </div>
+      </a>
+
+      <a href="https://wa.me/6285814945558" target="_blank" rel="noopener" class="contact-card">
+        <div class="contact-icon whatsapp">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.33A9.93 9.93 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2z"/></svg>
+        </div>
+        <div>
+          <div class="contact-card-title">WhatsApp</div>
+          <div class="contact-card-value">+62 858-1494-5558</div>
+        </div>
+      </a>
+
+      <a href="https://instagram.com/yuuki_k30" target="_blank" rel="noopener" class="contact-card">
+        <div class="contact-icon instagram">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
+        </div>
+        <div>
+          <div class="contact-card-title">Instagram</div>
+          <div class="contact-card-value">@yuuki_k30</div>
+        </div>
+      </a>
+
+      <a href="https://youtube.com/@PerfactCombo37" target="_blank" rel="noopener" class="contact-card">
+        <div class="contact-icon youtube">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3V9z" fill="currentColor"/></svg>
+        </div>
+        <div>
+          <div class="contact-card-title">YouTube</div>
+          <div class="contact-card-value">PerfactCombo37</div>
+        </div>
+      </a>
+    </div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  hideLoadingScreen();
+})();
+</script>
+</body>
+</html>

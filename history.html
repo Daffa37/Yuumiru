@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Riwayat - Yuumiru</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-logo">Yuumi<span style="color:#E8344C">ru</span><span class="dot"></span></div>
+</div>
+
+<div id="app-sidebar"></div>
+<div id="app-navbar"></div>
+
+<main class="page-content">
+  <div class="container">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <h1 class="page-title" data-i18n="history_title">Riwayat Tontonan</h1>
+      <button class="btn btn-ghost btn-sm" id="clearHistoryBtn" data-i18n="history_clear">Hapus Semua Riwayat</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+</main>
+
+<div id="app-footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<script src="js/layout.js"></script>
+<script>
+function historyItemHTML(item) {
+  const ep = item.episodes;
+  const anime = item.anime;
+  if (!ep || !anime) return '';
+  return `
+    <a href="watch.html?ep=${ep.id}" class="history-item">
+      <img class="history-thumb" src="${escapeHtml(ep.thumbnail_url || anime.cover_url || '')}" alt="" loading="lazy" onerror="this.style.opacity=0">
+      <div style="min-width:0;">
+        <div class="history-title">${escapeHtml(anime.title)} - EP ${ep.episode_number}</div>
+        <div class="history-meta">${escapeHtml(ep.title || '')}</div>
+      </div>
+      <div class="history-date">${new Date(item.watched_at).toLocaleDateString(Yi18n.current === 'ja' ? 'ja-JP' : Yi18n.current === 'en' ? 'en-US' : 'id-ID')}</div>
+    </a>
+  `;
+}
+
+async function loadHistory() {
+  const listEl = document.getElementById('historyList');
+  if (!YAuth.isLoggedIn()) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-7.36L3 8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3 data-i18n="watch_login_to_comment">Masuk untuk berkomentar</h3>
+        <a href="login.html" class="btn btn-primary" style="margin-top:14px;" data-i18n="nav_login">Masuk</a>
+      </div>
+    `;
+    Yi18n.applyToDOM(listEl);
+    hideLoadingScreen();
+    return;
+  }
+  try {
+    const history = await YData.getHistory(YAuth.user.id);
+    if (!history.length) {
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-7.36L3 8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3 data-i18n="history_empty">Kamu belum menonton apa pun.</h3>
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = history.map(historyItemHTML).join('');
+    }
+    Yi18n.applyToDOM(listEl);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideLoadingScreen();
+  }
+}
+
+document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+  if (!YAuth.isLoggedIn()) return;
+  if (!confirm(Yi18n.t('admin_confirm_delete'))) return;
+  try {
+    await YData.clearHistory(YAuth.user.id);
+    await loadHistory();
+    showToast(Yi18n.t('admin_deleted'), 'success');
+  } catch (err) {
+    showToast(Yi18n.t('error_generic'), 'error');
+  }
+});
+
+(async function init() {
+  await YAuth.init();
+  YLayout.init();
+  await loadHistory();
+})();
+
+window.addEventListener('yuumiru:langchange', () => loadHistory());
+</script>
+</body>
+</html>
